@@ -36,6 +36,12 @@ public class MethodType{
 		return this.offset;
 	}
 
+	public int getRCount(){
+		int temp = this.register_counter;
+		this.register_counter += 1;
+		return temp;
+	}
+
 	public String getRegCount(){
 		int temp = this.register_counter;
 		this.register_counter += 1;

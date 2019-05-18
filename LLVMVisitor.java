@@ -19,6 +19,11 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		return this.ll;
 	}
 	
+	public String ifLabel(){
+		int reg_count = curmethod.getRCount();
+		return "if" + reg_count;
+	}
+
 	/**
 	* f0 -> "class"
 	* f1 -> Identifier()
@@ -68,7 +73,8 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	public String visit(ClassDeclaration n, StoreTypes argu) throws Exception {
 		// curclass = symtable.getClass(n.f1.accept(this, argu));
 		curclass = symtable.getClass(n.f1.f0.toString());
-		System.out.println("CLASS DECL "+curclass.getName());
+		if (curclass == null)
+			throw new Exception("ClassDeclaration::CLASS NULL");
 		// n.f3.accept(this, argu);
 		n.f4.accept(this, argu);
 		// end of declaration, initialize variables
@@ -108,13 +114,13 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	public String visit(VarDeclaration n, StoreTypes argu) throws Exception {
 		// check for var decls slipped from first visitor, eg forward declaration
 		// String type = n.f0.accept(this, argu);
-		String varname = n.f1.f0.toString();
+		// String varname = n.f1.f0.toString();
 		
-		VariableType tmpvar;
-		if ((tmpvar = curmethod.getVar(varname)) == null){
-			tmpvar = curclass.getVar(varname);
-		}
-		this.ll += "\t%" + varname + " = alloca " + tmpvar.typeToLLVM(tmpvar.getType()) + "\n";
+		// VariableType tmpvar;
+		// if ((tmpvar = curmethod.getVar(varname)) == null){
+		// 	tmpvar = curclass.getVar(varname);
+		// }
+		this.ll += "\t%" + n.f1.f0.toString() + " = alloca " + curmethod.typeToLLVM(n.f0.accept(this, argu)) + "\n";
 
 		return null;
 	}
@@ -149,37 +155,43 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 
 			// generate code to allocate parameters, with this way we loop only once 
 			paramcode += "\t%" + varname + " = alloca " + lltype + "\n";
-			paramcode += "\tstore " + lltype + " %." + varname + ", " + lltype + "* %" + varname + "\n\n";
+			paramcode += "\tstore " + lltype + " %." + varname + ", " + lltype + "* %" + varname + "\n";
 			// load var in register
 			// loadparams += "\t%_" + curmethod.getRegCount() + " = load " + lltype + ", " + lltype + "* %" + varname + "\n";
 		}
 		
-		this.ll += ") {\n";
+		this.ll += ") {\n" + paramcode;
+		// this.ll += paramcode;
 		// n.f4.accept(this, argu);
 		n.f7.accept(this, argu);
 		n.f8.accept(this, argu);
-		// check return type to match with methods type
-		String retType = n.f10.accept(this, argu);
-		boolean typefound = false;
-		String methodtype = curmethod.getType();
-		if (methodtype.equals(retType))
-			typefound = true;
-		else{
-			ClassType tmpClass;
-			tmpClass = symtable.getClass(retType);
-			if (tmpClass != null){
-				String parentName = tmpClass.getParentName();
-				while (parentName != null){
-					if (methodtype.equals(parentName)){
-						typefound = true;
-						break;
-					}
-					tmpClass = symtable.getClass(tmpClass.parentName);
-					parentName = tmpClass.getParentName();
-				}
-			}
-		}
 		
+		// // check return type to match with methods type
+		// String retType = n.f10.accept(this, argu);
+		// boolean typefound = false;
+		// String methodtype = curmethod.getType();
+		// if (methodtype.equals(retType))
+		// 	typefound = true;
+		// else{
+		// 	ClassType tmpClass;
+		// 	tmpClass = symtable.getClass(retType);
+		// 	if (tmpClass != null){
+		// 		String parentName = tmpClass.getParentName();
+		// 		while (parentName != null){
+		// 			if (methodtype.equals(parentName)){
+		// 				typefound = true;
+		// 				break;
+		// 			}
+		// 			tmpClass = symtable.getClass(tmpClass.parentName);
+		// 			parentName = tmpClass.getParentName();
+		// 		}
+		// 	}
+		// }
+		
+		System.out.println("---------STARTING RET----------");
+		// String ret ="";
+		String ret = n.f10.accept(this, argu);
+		this.ll += "\tret " + curmethod.typeToLLVM(curmethod.getType()) + " " + ret + "\n";
 		this.ll += "}\n";
 		// end of method decl, initialize variable
 		curmethod = null;
@@ -201,8 +213,114 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 			n.f0.accept(this, argu);
 		else {
 			argument = new StoreTypes();
+			// argu = new StoreTypes();
 			n.f0.accept(this, argument);
 		}
+		return null;
+	}
+
+	/**
+	* f0 -> Identifier()
+	* f1 -> "="
+	* f2 -> Expression()
+	* f3 -> ";"
+	*/
+	public String visit(AssignmentStatement n, StoreTypes argu) throws Exception {
+		String name = n.f0.accept(this, argu);
+		System.out.println("Assignment:: " + name);
+		// check to identify variable
+		VariableType tmpvar;
+		boolean variableFound = false;
+		if ((tmpvar = curmethod.findVar(name)) != null){
+			variableFound = true;
+			String type = tmpvar.typeToLLVM(tmpvar.getType());
+			String type2 = n.f2.accept(this, argu);
+			// System.out.println("Assignment2:: " + n.f2.accept(this, argu));
+			this.ll += "\tstore " + type + " " + type2 + ", " + type + "* %" + name + "\n"; 
+
+		}
+		else{
+			if ((tmpvar = curclass.getVar(name)) != null){
+				variableFound = true;
+			}
+			else{
+				String parentName = curclass.getParentName();
+				ClassType tmpClass;
+				while (parentName != null){
+					tmpClass = symtable.getClass(parentName);
+					if ((tmpvar = tmpClass.getVar(name)) != null){
+						variableFound = true;
+						break;
+					}
+					parentName = tmpClass.getParentName();
+				}
+			}
+		}
+
+		// if (!variableFound)
+		// 	throw new Exception("Assignment::Variable doesn't have a declared type");
+		
+		// // check if types are same
+		// if (symtable.checkForType(tmpvar.getType(), n.f2.accept(this, argu)) == false)
+		// 	throw new Exception("Types dont match");
+
+
+		// String type1 = tmpvar.getType();
+		// String type2 = n.f2.accept(this, argu);
+		// boolean typeFound = false;
+		// if (type1.equals(type2))
+		// 	typeFound = true;
+		// else{
+		// 	ClassType tmpclass = symtable.getClass(type2);
+		// 	if (tmpclass != null){
+		// 		String parentName = tmpclass.getParentName();
+		// 		while (parentName != null){
+		// 			if (type1.equals(parentName)){
+		// 				typeFound = true;
+		// 				break;
+		// 			}
+		// 			tmpclass = symtable.getClass(parentName);
+		// 			parentName = tmpclass.getParentName();
+		// 		}
+		// 	}
+		// }
+
+		// if (!typeFound)
+		// 	throw new Exception("Types dont match");
+
+		return null;
+	}
+
+	/**
+	* f0 -> "if"
+	* f1 -> "("
+	* f2 -> Expression()
+	* f3 -> ")"
+	* f4 -> Statement()
+	* f5 -> "else"
+	* f6 -> Statement()
+	*/
+	public String visit(IfStatement n, StoreTypes argu) throws Exception {
+		// allocate registers now in order to match up register names with given example code
+		String l0 = ifLabel();
+		String l1 = ifLabel();
+		String l2 = ifLabel();
+		System.out.println("iflabel "+l1);
+		String res1 = n.f2.accept(this, argu);
+		System.out.println("IFSTMT::"+res1); 
+		this.ll += "\tbr i1 " + res1 + ", label %" + l0 + ", label %" + l1 + "\n\n";
+		this.ll += l0 + ": \n";
+		n.f4.accept(this, argu);
+		this.ll += "\n\tbr label %" + l2 + "\n\n";
+		this.ll += l1 + ": \n";
+		n.f6.accept(this, argu);
+		this.ll += "\n\tbr label %" + l2 + "\n\n";
+		this.ll += l2 + ": \n";
+		
+		// if (!n.f2.accept(this, argu).equals("boolean"))
+		// 	throw new Exception("IfStatement::Expression type must be Boolean");
+		// System.out.println("^^ "+n.f4.accept(this, argu));
+		// System.out.println("^^^ "+n.f6.accept(this, argu));
 		return null;
 	}
 
@@ -272,23 +390,61 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	*/
 	public String visit(ExpressionTerm n, StoreTypes argu) throws Exception {
 		// add parameter type to list 
-		String reg = n.f1.accept(this, argu);
-		argu.addType(reg);
+		String r = n.f1.accept(this, argu);
+		argu.addType(r);
 		return null;
 	}
 
-	// /**
-	// * f0 -> PrimaryExpression()
-	// * f1 -> "<"
-	// * f2 -> PrimaryExpression()
-	// */
-	// public String visit(CompareExpression n, StoreTypes argu) throws Exception {
-	// 	String type1 = n.f0.accept(this, argu);
-	// 	// if (!type1.equals("int") || !type1.equals(n.f2.accept(this, argu)))
-	// 	// 	throw new Exception("CompareExpression::Error, type must be int");
+	/**
+	* f0 -> PrimaryExpression()
+	* f1 -> "-"
+	* f2 -> PrimaryExpression()
+	*/
+	public String visit(MinusExpression n, StoreTypes argu) throws Exception {
+		String type1 = n.f0.accept(this, argu);
+		String type2 = n.f2.accept(this, argu);
+		String sub = "sub i32 " + type1 + ", " + type2 + "\n";
+		String r = curmethod.getRegCount();
+		this.ll += "\t" + r + " = " + sub;
+		// if (!type1.equals("int") || !type1.equals(n.f2.accept(this, argu)))
+		// 	throw new Exception("MinusExpression::Error, type must be int");
+
+		return r;
+	}
+
+	/**
+	* f0 -> PrimaryExpression()
+	* f1 -> "*"
+	* f2 -> PrimaryExpression()
+	*/
+	public String visit(TimesExpression n, StoreTypes argu) throws Exception {
+		String type1 = n.f0.accept(this, argu);
+		String type2 = n.f2.accept(this, argu);
+		String mul = "mul i32 " + type1 + ", " + type2 + "\n"; 
+		String r = curmethod.getRegCount();
+		this.ll += "\t" + r + " = " + mul;
+		// if (!type1.equals("int") || !type1.equals(n.f2.accept(this, argu)))
+		// 	throw new Exception("TimesExpression::Error, type must be int");
+
+		return r;
+	}
+
+	/**
+	* f0 -> PrimaryExpression()
+	* f1 -> "<"
+	* f2 -> PrimaryExpression()
+	*/
+	public String visit(CompareExpression n, StoreTypes argu) throws Exception {
+		String type1 = n.f0.accept(this, argu);
+		String type2 = n.f2.accept(this, argu);
+		String cmp = "icmp slt i32 " + type1 + ", " + type2 + "\n";
+		String r0 = curmethod.getRegCount();
+		this.ll += "\t" + r0 + " = " + cmp; 
+		// if (!type1.equals("int") || !type1.equals(n.f2.accept(this, argu)))
+		// 	throw new Exception("CompareExpression::Error, type must be int");
 			
-	// 	// return "%_8";
-	// }
+		return r0;
+	}
 
 	/**
 	* f0 -> PrimaryExpression()
@@ -300,9 +456,10 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	*/
 	public String visit(MessageSend n, StoreTypes argu) throws Exception {
 		StoreTypes argument = new StoreTypes();
+		// argu = new StoreTypes();
 		String classname = n.f0.accept(this,argument);
 		System.out.println("***MSGSENT "+argument.reg);
-		ClassType tmpclass = symtable.getClass(classname);
+		ClassType tmpclass = symtable.getClass(argument.reg);
 		if (tmpclass == null) {
 			throw new Exception("MessageSend::CLASS NULL");
 		}
@@ -313,13 +470,14 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		String r4 = curmethod.getRegCount();
 
 		// argument.reg = null;
-		String methodname = n.f2.accept(this, argu);
+		String methodname = n.f2.f0.toString();
 		MethodType tmpMethod;
 		if ((tmpMethod = tmpclass.getMethod(methodname)) == null)
 			throw new Exception("MessageSend::Method NULL");
 		
-		this.ll += "\t; " + classname + "." + methodname + " : " + tmpMethod.getOffset() + "\n"; 
-		this.ll += "\t" + r0 + " = bitcast i8* " + argument.reg + " to i8***\n";
+		argu.reg = tmpMethod.getType();
+		this.ll += "\t; " + argument.reg + "." + methodname + " : " + tmpMethod.getOffset() + "\n"; 
+		this.ll += "\t" + r0 + " = bitcast i8* " + classname + " to i8***\n";
 		this.ll += "\t" + r1 + " = load i8**, i8*** " + r0 + "\n";
 		this.ll += "\t" + r2 + " = getelementptr i8*, i8** " + r1 + ", i32 0\n";
 		this.ll += "\t" + r3 + " = load i8*, i8** " + r2 + "\n";
@@ -335,14 +493,14 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 			this.ll += ")*\n";
 		}
 		String r5 = curmethod.getRegCount();
-		this.ll += "\t" + r5 + " = call " + tmpMethod.typeToLLVM(tmpMethod.getType()) + " " + r4 + "(i8* " + argument.reg;
 		// String fname = n.f2.f0.toString();
 
-		argu = new StoreTypes();
-		n.f4.accept(this, argu);
-		for (int i=0;i<argu.types.size();i++){
+		StoreTypes args2 = new StoreTypes();
+		n.f4.accept(this, args2);
+		this.ll += "\t" + r5 + " = call " + tmpMethod.typeToLLVM(tmpMethod.getType()) + " " + r4 + "(i8* " + classname;
+		for (int i=0;i<args2.types.size();i++){
 			VariableType vari = params.get(i); 
-			this.ll += ", " + vari.typeToLLVM(vari.getType()) + " " + argu.types.get(i);
+			this.ll += ", " + vari.typeToLLVM(vari.getType()) + " " + args2.types.get(i);
 		}
 		this.ll += ")\n";
 		// argument.type = null;
@@ -407,8 +565,8 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	*       | PrimaryExpression()
 	*/
 	public String visit(Clause n, StoreTypes argu) throws Exception {
-		n.f0.accept(this, argu);
-		System.out.println("Clause "+argu.reg);
+		// n.f0.accept(this, argu);
+		// System.out.println("Clause "+argu.reg);
 		return n.f0.accept(this, argu);
 	}
 
@@ -462,8 +620,10 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 			if (!variableFound)
 				throw new Exception("PrimExpr::Variable doesn't have a declared type");
 
-			
-			System.out.println("RET PR " + name);
+			if (argu!=null)
+				System.out.println("RET PR " + name + " and  "+ argu.reg);
+			else
+				System.out.println("RET PR " + name);
 			return register;
 		}
 
@@ -471,6 +631,16 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		// 	argu.reg = name;
 		System.out.println("RET PR2 " + name);
 		return name;
+	}
+
+	/**
+	* f0 -> "this"
+	*/
+	public String visit(ThisExpression n, StoreTypes argu) throws Exception {
+		argu.reg = curclass.getName();
+		System.out.println("ThisExpr::" + curclass.getName() + " and argu " + argu.reg);
+		return "%this";
+		// return curclass.getName();
 	}
 
 	/**
@@ -494,8 +664,18 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		this.ll += "\tstore i8** " + r2 + ", i8*** " + r1 + "\n";
 		// System.out.println(ll);
 		// will need it in future
-		argu.reg = r0;
-		return name;
+		argu.reg = name;
+		return r0;
+	}
+
+	/**
+	* f0 -> "("
+	* f1 -> Expression()
+	* f2 -> ")"
+	*/
+	public String visit(BracketExpression n, StoreTypes argu) throws Exception {
+		// String type = n.f1.accept(this, argu);
+		return n.f1.accept(this, argu);
 	}
 
 	/**
@@ -506,8 +686,8 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	*/
 	public String visit(Type n, StoreTypes argu) throws Exception {
 		String type =  n.f0.accept(this, argu);
-		if (type.equals("int") == false && type.equals("boolean") == false && type.equals("int[]") == false && symtable.getClass(type) == null)
-			throw new Exception("Not accepted type");
+		// if (type.equals("int") == false && type.equals("boolean") == false && type.equals("int[]") == false && symtable.getClass(type) == null)
+		// 	throw new Exception("Not accepted type");
 		return type;
 	}
 
