@@ -29,6 +29,11 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		return "loop" + reg_count;
 	}
 
+	public String andLabel(){
+		int reg_count = curmethod.getRCount();
+		return "and" + reg_count;
+	}
+
 	/**
 	* f0 -> "class"
 	* f1 -> Identifier()
@@ -283,7 +288,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 				String r1 = curmethod.getRegCount();
 				this.ll += "\t" + r0 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
 				this.ll += "\t" + r1 + " = bitcast i8* " + r0 + " to " + type + "*\n";
-				this.ll += "\tstore " + type + reg + ", " + type + "* " + r1 + "\n";
+				this.ll += "\tstore " + type + " " + reg + ", " + type + "* " + r1 + "\n";
 			}
 		}
 
@@ -351,6 +356,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 
 		VariableType tmpvar;
 		boolean variableFound = false;
+		boolean classvariable = false;
 		String tempreg = "";
 		if ((tmpvar = curmethod.findVar(name)) != null){
 			variableFound = true;
@@ -363,14 +369,15 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		else{
 			if ((tmpvar = curclass.getVar(name)) != null){
 				variableFound = true;
+				classvariable = true;
 				System.out.println("EDW MESA GAMW " + name);
-				String r1 = curmethod.getRegCount();
-				String r2 = curmethod.getRegCount();
-				String r3 = curmethod.getRegCount();
-				tempreg = r3; 
-				this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
-				this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n";
-				this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
+				// String r1 = curmethod.getRegCount();
+				// String r2 = curmethod.getRegCount();
+				// String r3 = curmethod.getRegCount();
+				// tempreg = r3; 
+				// this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+				// this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n";
+				// this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
 			}
 			else{
 				String parentName = curclass.getParentName();
@@ -379,18 +386,27 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 					tmpClass = symtable.getClass(parentName);
 					if ((tmpvar = tmpClass.getVar(name)) != null){
 						variableFound = true;
-
-						String r1 = curmethod.getRegCount();
-						String r2 = curmethod.getRegCount();
-						String r3 = curmethod.getRegCount();
-						tempreg = r3; 
-						this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
-						this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n"; 
-						this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
+						classvariable = true;
+						// String r1 = curmethod.getRegCount();
+						// String r2 = curmethod.getRegCount();
+						// String r3 = curmethod.getRegCount();
+						// tempreg = r3; 
+						// this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+						// this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n"; 
+						// this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
 						break;
 					}
 					parentName = tmpClass.getParentName();
 				}
+			}
+			if (classvariable){
+				String r1 = curmethod.getRegCount();
+				String r2 = curmethod.getRegCount();
+				String r3 = curmethod.getRegCount();
+				tempreg = r3; 
+				this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+				this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n";
+				this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
 			}
 		} 
 
@@ -548,6 +564,38 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	}
 
 	/**
+	* f0 -> Clause()
+	* f1 -> "&&"
+	* f2 -> Clause()
+	*/
+	public String visit(AndExpression n, StoreTypes argu) throws Exception {
+		String clause1 = n.f0.accept(this, argu);
+		String r0 = curmethod.getRegCount();
+		// String r1 = curmethod.getRegCount();
+		String l0 = andLabel();
+		String l1 = andLabel();
+		String l2 = andLabel();
+		String l3 = andLabel();
+
+		this.ll += "\tbr label %" + l0 + "\n";
+		this.ll += "\t" + l0 + ":\n";
+		this.ll += "\t\tbr i1 " + clause1 + ", label %" + l1 + ", label %" + l2 + "\n";
+		this.ll += "\t" + l1 + ":\n";
+		String clause2 = n.f2.accept(this, argu);
+		this.ll += "\t\tbr label %" + l2 + "\n"; 
+		this.ll += "\t" + l2 + ":\n";
+		this.ll += "\t\tbr label %" + l3 + "\n";
+		this.ll += "\t" + l3 + ":\n";
+		this.ll += "\t\t" + r0 + " = " + "phi i1 [0, %" + l0 + "], [" + clause2 + ", %" + l2 + "]\n";
+		
+		System.out.println("AndExpression::" + clause1 + " and " + clause2);
+		// n.f0.accept(this, argu);
+		// n.f1.accept(this, argu);
+		// n.f2.accept(this, argu);
+		return r0;
+	}
+
+	/**
 	* f0 -> PrimaryExpression()
 	* f1 -> "+"
 	* f2 -> PrimaryExpression()
@@ -645,6 +693,9 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	public String visit(MessageSend n, StoreTypes argu) throws Exception {
 		StoreTypes argument = new StoreTypes();
 		// argu = new StoreTypes();
+		// String classname = n.f0.accept(this,argu);
+		// System.out.println("***MSGSENT "+argu.reg);
+		// ClassType tmpclass = symtable.getClass(argu.reg);
 		String classname = n.f0.accept(this,argument);
 		System.out.println("***MSGSENT "+argument.reg);
 		ClassType tmpclass = symtable.getClass(argument.reg);
@@ -670,6 +721,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		this.ll += "\t" + r2 + " = getelementptr i8*, i8** " + r1 + ", i32 " + (tmpMethod.getOffset()/8) + "\n";
 		this.ll += "\t" + r3 + " = load i8*, i8** " + r2 + "\n";
 		this.ll += "\t" + r4 + " = bitcast i8* " + r3 + " to " + tmpMethod.typeToLLVM(tmpMethod.getType()) + " (i8*";
+		// argu.reg = tmpMethod.getType();
 		ArrayList<VariableType> params = tmpMethod.getParams();
 		int sz = params.size();
 		if (sz == 0)
