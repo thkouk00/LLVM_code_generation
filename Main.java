@@ -29,6 +29,16 @@ class Main {
 			    // stVisitor.symtable.printOffsets();
 				LLVMVisitor llVisitor = new LLVMVisitor(stVisitor.symtable, ll);
 				root.accept(llVisitor, null);
+
+				int pos = args[count].lastIndexOf(".");
+				// Otherwise return the string, up to the dot.
+
+				String filename = args[count].substring(0, pos);
+				PrintWriter writer = new PrintWriter("./output/" + filename + ".ll");
+		        writer.println(llVisitor.getLLCode());
+		        
+		        writer.close();
+
 				System.out.println(llVisitor.getLLCode());
 			}
 			catch(ParseException ex){
@@ -39,7 +49,7 @@ class Main {
 			}
 			catch (Exception e) {
 				System.err.println("\n****************************************");
-				System.err.println("ERROR IN TYPE CHECKING -> INPUT FILE "+(count+1)+" : "+args[count]);
+				System.err.println("ERROR IN TYPE CHECKING -> INPUT FILE " + (count + 1) + " : " + args[count]);
 				System.err.println(e.getMessage());
 				System.err.println("****************************************\n");
 			}

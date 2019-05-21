@@ -225,6 +225,18 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	}
 
 	/**
+	* f0 -> "{"
+	* f1 -> ( Statement() )*
+	* f2 -> "}"
+	*/
+	public String visit(Block n, StoreTypes argu) throws Exception {
+		// n.f0.accept(this, argu);
+		n.f1.accept(this, argu);
+		// n.f2.accept(this, argu);
+		return null;
+	}
+
+	/**
 	* f0 -> Identifier()
 	* f1 -> "="
 	* f2 -> Expression()
@@ -232,21 +244,24 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	*/
 	public String visit(AssignmentStatement n, StoreTypes argu) throws Exception {
 		String name = n.f0.accept(this, argu);
+		String reg = n.f2.accept(this, argu);
+		
 		System.out.println("Assignment:: " + name);
 		// check to identify variable
 		VariableType tmpvar;
 		boolean variableFound = false;
+		boolean classvariable = false;
 		if ((tmpvar = curmethod.findVar(name)) != null){
 			variableFound = true;
 			String type = tmpvar.typeToLLVM(tmpvar.getType());
-			String type2 = n.f2.accept(this, argu);
 			// System.out.println("Assignment2:: " + n.f2.accept(this, argu));
-			this.ll += "\tstore " + type + " " + type2 + ", " + type + "* %" + name + "\n"; 
+			this.ll += "\tstore " + type + " " + reg + ", " + type + "* %" + name + "\n"; 
 
 		}
 		else{
 			if ((tmpvar = curclass.getVar(name)) != null){
 				variableFound = true;
+				classvariable = true;
 			}
 			else{
 				String parentName = curclass.getParentName();
@@ -255,10 +270,20 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 					tmpClass = symtable.getClass(parentName);
 					if ((tmpvar = tmpClass.getVar(name)) != null){
 						variableFound = true;
+						classvariable = true;
 						break;
 					}
 					parentName = tmpClass.getParentName();
 				}
+			}
+
+			if (classvariable){
+				String type = tmpvar.typeToLLVM(tmpvar.getType());
+				String r0 = curmethod.getRegCount();
+				String r1 = curmethod.getRegCount();
+				this.ll += "\t" + r0 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+				this.ll += "\t" + r1 + " = bitcast i8* " + r0 + " to " + type + "*\n";
+				this.ll += "\tstore " + type + reg + ", " + type + "* " + r1 + "\n";
 			}
 		}
 
@@ -307,21 +332,82 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	* f6 -> ";"
 	*/
 	public String visit(ArrayAssignmentStatement n, StoreTypes argu) throws Exception {
-		String array = n.f0.accept(this, argu);
-		String r0 = curmethod.getRegCount();
-		this.ll += "\t" + r0 + " = load i32*, i32** %" + array + "\n";
-		// n.f1.accept(this, argu);
-		String index = n.f2.accept(this, argu);
-		String r1 = curmethod.getRegCount();
-		this.ll += "\t" + r1 + " = getelementptr i32, i32* " + r0 + ", i32 " + index + "\n";
-		// System.out.println("ArrayAssignmentStatement::" + n.f5.accept(this, argu));
-		// System.out.println("ArrayAssignmentStatementarg::" + argu.reg);
-		// n.f3.accept(this, argu);
-		// n.f4.accept(this, argu);
-		String value = n.f5.accept(this, argu);
-		// String r2 = curmethod.getRegCount();
-		this.ll += "\tstore i32 " + value + ", i32* " + r1 + "\n"; 
-		// n.f6.accept(this, argu);
+		String name = n.f0.accept(this, argu);
+		// String r0 = curmethod.getRegCount();
+		// this.ll += "\t" + r0 + " = load i32*, i32** %" + array + "\n";
+		// // n.f1.accept(this, argu);
+		// String index = n.f2.accept(this, argu);
+		// String r1 = curmethod.getRegCount();
+		// this.ll += "\t" + r1 + " = getelementptr i32, i32* " + r0 + ", i32 " + index + "\n";
+		// // System.out.println("ArrayAssignmentStatement::" + n.f5.accept(this, argu));
+		// // System.out.println("ArrayAssignmentStatementarg::" + argu.reg);
+		// // n.f3.accept(this, argu);
+		// // n.f4.accept(this, argu);
+		// String value = n.f5.accept(this, argu);
+		// // String r2 = curmethod.getRegCount();
+		// this.ll += "\tstore i32 " + value + ", i32* " + r1 + "\n"; 
+		// // n.f6.accept(this, argu);
+		// return null;
+
+		VariableType tmpvar;
+		boolean variableFound = false;
+		String tempreg = "";
+		if ((tmpvar = curmethod.findVar(name)) != null){
+			variableFound = true;
+
+			String r1 = curmethod.getRegCount();
+			tempreg = r1; 
+			this.ll += "\t" + r1 + " = load i32*, i32** %" + tmpvar.getName() + "\n";
+			System.out.println("OXI EDW MESA GAMW " + name);
+		}
+		else{
+			if ((tmpvar = curclass.getVar(name)) != null){
+				variableFound = true;
+				System.out.println("EDW MESA GAMW " + name);
+				String r1 = curmethod.getRegCount();
+				String r2 = curmethod.getRegCount();
+				String r3 = curmethod.getRegCount();
+				tempreg = r3; 
+				this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+				this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n";
+				this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
+			}
+			else{
+				String parentName = curclass.getParentName();
+				ClassType tmpClass;
+				while (parentName != null){
+					tmpClass = symtable.getClass(parentName);
+					if ((tmpvar = tmpClass.getVar(name)) != null){
+						variableFound = true;
+
+						String r1 = curmethod.getRegCount();
+						String r2 = curmethod.getRegCount();
+						String r3 = curmethod.getRegCount();
+						tempreg = r3; 
+						this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+						this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n"; 
+						this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
+						break;
+					}
+					parentName = tmpClass.getParentName();
+				}
+			}
+		} 
+
+		if (!variableFound)
+			throw new Exception("ArrayAssignmentStatement::Variable not found");
+		String exp1 = n.f2.accept(this, argu);
+		String exp2 = n.f5.accept(this, argu);
+		System.out.println(curmethod.getName() + "LALA 1" +exp1 + "  2 -> " + exp2);
+		String r4 = curmethod.getRegCount();
+		// String r5 = curmethod.getRegCount();
+		String type = tmpvar.typeToLLVM(tmpvar.getType());
+		// this.ll += "\t" + r4 + " = getelementptr " + type + ", " + type + "* " + tempreg + ", " + type + " " + exp1 + "\n";
+		this.ll += "\t" + r4 + " = getelementptr i32, i32* " + tempreg + ", i32 "+ exp1 + "\n";
+		this.ll += "\tstore i32 " + exp2 + ", i32* " + r4 + "\n";
+		// String r4 = curmethod.getRegCount();
+		// String r5 = curmethod.getRegCount();
+		// this.ll += "\t" + 
 		return null;
 	}
 
@@ -486,6 +572,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		String sub = "sub i32 " + type1 + ", " + type2 + "\n";
 		String r = curmethod.getRegCount();
 		this.ll += "\t" + r + " = " + sub;
+		System.out.println("MinusExpression::" + type1 + " , " + type2);
 		// if (!type1.equals("int") || !type1.equals(n.f2.accept(this, argu)))
 		// 	throw new Exception("MinusExpression::Error, type must be int");
 
@@ -684,26 +771,37 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 	public String visit(PrimaryExpression n, StoreTypes argu) throws Exception {
 		String name = n.f0.accept(this, argu);		
 		System.out.println("NAME "+name + " which " + n.f0.which);
-		String register = "";
+		String r0 = "";
 		// which -> find which rule was chosen
 		// 3 is Identifier(), only here must check for type
 		// every other rule returns type
 		if (n.f0.which == 3){
 			VariableType tmpvar;
 			boolean variableFound = false;
+			boolean classvariable = false;
 			if ((tmpvar = curmethod.findVar(name)) != null){
 				variableFound = true;
 
-				register = curmethod.getRegCount();
+				r0 = curmethod.getRegCount();
 				String type = curmethod.typeToLLVM(tmpvar.getType());
-				this.ll += "\t" + register + " = load " + type + ", " + type + "* %" + name + "\n"; 
-				System.out.println("&&&&&&& " + register + " type is " + type + tmpvar.getType());
-				if (argu != null)
-					argu.reg = tmpvar.getType();
+				this.ll += "\t" + r0 + " = load " + type + ", " + type + "* %" + name + "\n"; 
+				System.out.println("(1) " + r0 + " name is " + tmpvar.getName());
+				// if (argu != null)
+				// 	argu.reg = tmpvar.getType();
 			}
 			else{
-				if ((tmpvar = curclass.getVar(name)) != null)
+				if ((tmpvar = curclass.getVar(name)) != null){
 					variableFound = true;
+					classvariable = true;
+					// String r1 = curmethod.getRegCount();
+					// String r2 = curmethod.getRegCount();
+					// r0 = curmethod.getRegCount();
+					// this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+					// String type = tmpvar.typeToLLVM(tmpvar.getType());
+					// this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to " + type + "*\n";
+					// this.ll += "\t" + r0 + " = load " + type + ", " + type + "* " + r2 + "\n";
+					// System.out.println("(2) getelem " + r1 + " bitcast " + r2 + " load " + r0 + " name is " + tmpvar.getName());
+				}
 				else{
 					String parentName = curclass.getParentName();
 					ClassType tmpClass;
@@ -711,21 +809,43 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 						tmpClass = symtable.getClass(parentName);
 						if ((tmpvar = tmpClass.getVar(name)) != null){
 							variableFound = true;
+							classvariable = true;
+							// String r1 = curmethod.getRegCount();
+							// String r2 = curmethod.getRegCount();
+							// r0 = curmethod.getRegCount();
+							// String type = tmpvar.typeToLLVM(tmpvar.getType());
+							// this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+							// this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to " + type + "*\n";
+							// this.ll += "\t" + r0 + " = load " + type + ", " + type + "* " + r2 + "\n";
+							// System.out.println("(3) getelem " + r1 + " bitcast " + r2 + " load " + r0 + " name is " + tmpvar.getName());
 							break;
 						}
 						parentName = tmpClass.getParentName();
 					}
+				}
+
+				if (classvariable){
+					String r1 = curmethod.getRegCount();
+					String r2 = curmethod.getRegCount();
+					r0 = curmethod.getRegCount();
+					String type = tmpvar.typeToLLVM(tmpvar.getType());
+					this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
+					this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to " + type + "*\n";
+					this.ll += "\t" + r0 + " = load " + type + ", " + type + "* " + r2 + "\n";
 				}
 			}
 
 			if (!variableFound)
 				throw new Exception("PrimExpr::Variable doesn't have a declared type");
 
+			if (argu != null)
+				argu.reg = tmpvar.getType();
+
 			if (argu!=null)
 				System.out.println("RET PR " + name + " and  "+ argu.reg);
 			else
 				System.out.println("RET PR " + name);
-			return register;
+			return r0;
 		}
 
 		// if (argu != null)
@@ -798,6 +918,17 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		argu.reg = "int[]";
 		// return register
 		return r1;
+	}
+
+	/**
+	* f0 -> "!"
+	* f1 -> Clause()
+	*/
+	public String visit(NotExpression n, StoreTypes argu) throws Exception {
+		String clause = n.f1.accept(this, argu);
+		String r0 = curmethod.getRegCount();
+		this.ll += "\t" + r0 + " = xor i1 1, " + clause + "\n";
+		return r0;
 	}
 
 	/**
