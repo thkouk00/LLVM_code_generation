@@ -132,6 +132,8 @@ public class SymbolTable{
 		Iterator<Map.Entry<String, MethodType>> MethIterator;
 
 		while (LinkedHashMapIterator.hasNext()) {
+			String tmpll = "";
+			Set<String> linkedHashSet = new LinkedHashSet<>();
 			Map.Entry<String, ClassType> entry = LinkedHashMapIterator.next();
 			ClassType tmpclass = entry.getValue(); 
 			int methods_num = tmpclass.methods.size();
@@ -144,8 +146,9 @@ public class SymbolTable{
 				ll += "0 x i8*] []\n";
 				continue;
 			}
-			else
-				ll += tmpmethods.size() + " x i8*] [";
+			// else{
+			// 	ll += tmpmethods.size() + " x i8*] [";
+			// }
 			
 			int meth_counter = tmpmethods.size();
 			MethIterator = tmpmethods.entrySet().iterator();
@@ -153,18 +156,56 @@ public class SymbolTable{
 				Map.Entry<String, MethodType> entry3 = MethIterator.next();
 				MethodType tmpmethod = entry3.getValue();
 				
+				// new start
+				linkedHashSet.add(tmpmethod.getName());
+				// new end
+				System.out.println("MPIKA EDW kai len " + linkedHashSet.size());
 				ArrayList<VariableType> params = tmpmethod.getParams();
-				ll += "i8* bitcast (" + tmpmethod.typeToLLVM(tmpmethod.getType()) + " (i8*";
+				tmpll += "i8* bitcast (" + tmpmethod.typeToLLVM(tmpmethod.getType()) + " (i8*";
 				for (VariableType temp : params) {
-					ll += ", " + temp.typeToLLVM(temp.getType());
+					tmpll += ", " + temp.typeToLLVM(temp.getType());
 				}
-				ll += ")* @" + entry.getKey() + "." + entry3.getKey() + " to i8*)";
+				tmpll += ")* @" + entry.getKey() + "." + entry3.getKey() + " to i8*)";
 				meth_counter -= 1;
 				if (meth_counter != 0)
-					ll += ", ";
+					tmpll += ", ";
 			}
+			
+			// start
+			Iterator<Map.Entry<String, MethodType>> MethIterator2;
+			String parentName = tmpclass.getParentName();
+			ClassType parentclass;
+			while (parentName != null){
+				parentclass = classes.get(parentName); 
+				tmpmethods = parentclass.getMethods();
+				meth_counter = tmpmethods.size();
+				MethIterator2 = tmpmethods.entrySet().iterator();
+				while (MethIterator2.hasNext()){
+					Map.Entry<String, MethodType> entry4 = MethIterator2.next();
+					MethodType tmpmethod = entry4.getValue();
+					if (linkedHashSet.contains(tmpmethod.getName()))
+						continue;
+					linkedHashSet.add(tmpmethod.getName());
+					if (linkedHashSet.size() > 0)
+						tmpll += ", ";
+					ArrayList<VariableType> params = tmpmethod.getParams();
+					tmpll += "i8* bitcast (" + tmpmethod.typeToLLVM(tmpmethod.getType()) + " (i8*";
+					for (VariableType temp : params) {
+						tmpll += ", " + temp.typeToLLVM(temp.getType());
+					}
+					tmpll += ")* @" + parentName + "." + entry4.getKey() + " to i8*)";
+					// meth_counter -= 1;
+					// if (meth_counter != 0)
+					// 	tmpll += ", ";
+
+				}
+				parentName = parentclass.getParentName();
+			}
+			// end
+			ll += linkedHashSet.size() + " x i8*] [" + tmpll;
 			ll += "]\n\n";
 
+			tmpclass.addVtableSize(linkedHashSet.size());
 			// System.out.println("\n");
 		}
 

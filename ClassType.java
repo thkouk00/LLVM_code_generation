@@ -7,6 +7,7 @@ public class ClassType{
 	// shows what value next method/variable must have , eg last variable entry was boolean with offset 0, so varOffsetBase (next entry) will have value = 1
 	int varOffsetBase;
 	int methodOffsetBase;
+	int vtable_size;
 	String name;
 	String parentName;
 	LinkedHashMap<String, MethodType> methods;
@@ -19,6 +20,7 @@ public class ClassType{
 		this.variables = new LinkedHashMap<String, VariableType>();
 		this.varOffsetBase = 0;
 		this.methodOffsetBase = 0;
+		this.vtable_size = 0;
 	}
 
 	// if class is extended take parents offsetBase
@@ -29,6 +31,11 @@ public class ClassType{
 		this.variables = new LinkedHashMap<String, VariableType>();
 		this.varOffsetBase = varoffset;
 		this.methodOffsetBase = methodoffset;
+		this.vtable_size = 0;
+	}
+
+	public int getVtableSize(){
+		return this.vtable_size;
 	}
 
 	public String getName(){
@@ -102,6 +109,11 @@ public class ClassType{
 		this.varOffsetBase += offset;
 		// System.out.println("ClassType::"+this.name+" Inserting "+name+" variable with type "+type+" and offset "+varOffsetBase);
 
+		return true;
+	}
+
+	public boolean addVtableSize(int size){
+		this.vtable_size = size;
 		return true;
 	}
 

@@ -34,6 +34,11 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		return "and" + reg_count;
 	}
 
+	public String oobLabel(){
+		int reg_count = curmethod.getRCount();
+		return "oob" + reg_count;
+	}
+
 	/**
 	* f0 -> "class"
 	* f1 -> Identifier()
@@ -107,7 +112,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		// curclass = symtable.getClass(n.f1.accept(this, argu));
 		curclass = symtable.getClass(n.f1.f0.toString());
 		
-		n.f5.accept(this, argu);
+		n.f3.accept(this, argu);
 		n.f6.accept(this, argu);
 		
 		// end of declaration, initialize variables
@@ -357,13 +362,17 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		VariableType tmpvar;
 		boolean variableFound = false;
 		boolean classvariable = false;
-		String tempreg = "";
+		String arrayptr = "";
+		String len = curmethod.getRegCount();
 		if ((tmpvar = curmethod.findVar(name)) != null){
 			variableFound = true;
 
 			String r1 = curmethod.getRegCount();
-			tempreg = r1; 
+			// String len = curmethod.getRegCount();
+			arrayptr = r1; 
 			this.ll += "\t" + r1 + " = load i32*, i32** %" + tmpvar.getName() + "\n";
+			// extra load in order to take first array index with array length as value
+			this.ll += "\t" + len + " = load i32 , i32* " + r1 + "\n";
 			System.out.println("OXI EDW MESA GAMW " + name);
 		}
 		else{
@@ -403,27 +412,46 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 				String r1 = curmethod.getRegCount();
 				String r2 = curmethod.getRegCount();
 				String r3 = curmethod.getRegCount();
-				tempreg = r3; 
+				// String len = curmethod.getRegCount();
+				arrayptr = r3; 
 				this.ll += "\t" + r1 + " = getelementptr i8, i8* %this, i32 " + (tmpvar.getOffset() + 8) + "\n";
 				this.ll += "\t" + r2 + " = bitcast i8* " + r1 + " to i32**\n";
 				this.ll += "\t" + r3 + " = load i32*, i32** " + r2 + "\n";
+				// extra load in order to take first array index with array length as value
+				this.ll += "\t" + len + " = load i32, i32* " + r3 + "\n";  
 			}
 		} 
 
 		if (!variableFound)
 			throw new Exception("ArrayAssignmentStatement::Variable not found");
 		String exp1 = n.f2.accept(this, argu);
+		String r4 = curmethod.getRegCount();
+
+		System.out.println("LEN IS " + len);
+
+		this.ll += "\t" + r4 + " = icmp ult i32 " + exp1 + ", " + len + "\n";
+		String oob1 = oobLabel();
+		String oob2 = oobLabel();
+		String oob3 = oobLabel();
+		this.ll += "\tbr i1 " + r4 + ", label %" +  oob1 + ", label %" + oob2 + "\n";
+		this.ll += "\t" + oob1 + ":\n";
+		String r5 = curmethod.getRegCount();
+		String r6 = curmethod.getRegCount();
+		this.ll += "\t" + r5 + " = add i32 " + exp1 + ", 1\n";  
+		this.ll += "\t" + r6 + " = getelementptr i32, i32* " + arrayptr + ", i32 "+ r5 + "\n";
+		// this.ll += "\t" + oob2 + ":\n";
 		String exp2 = n.f5.accept(this, argu);
 		System.out.println(curmethod.getName() + "LALA 1" +exp1 + "  2 -> " + exp2);
-		String r4 = curmethod.getRegCount();
-		// String r5 = curmethod.getRegCount();
-		String type = tmpvar.typeToLLVM(tmpvar.getType());
+		
+		// String type = tmpvar.typeToLLVM(tmpvar.getType());
 		// this.ll += "\t" + r4 + " = getelementptr " + type + ", " + type + "* " + tempreg + ", " + type + " " + exp1 + "\n";
-		this.ll += "\t" + r4 + " = getelementptr i32, i32* " + tempreg + ", i32 "+ exp1 + "\n";
-		this.ll += "\tstore i32 " + exp2 + ", i32* " + r4 + "\n";
-		// String r4 = curmethod.getRegCount();
-		// String r5 = curmethod.getRegCount();
-		// this.ll += "\t" + 
+		this.ll += "\tstore i32 " + exp2 + ", i32* " + r6 + "\n";
+		this.ll += "\t br label %" + oob3 + "\n";
+		this.ll += "\t" + oob2 + ":\n";
+		this.ll += "\tcall void @throw_oob()\n";
+		this.ll += "\t br label %" + oob3 + "\n";
+		this.ll += "\t" + oob3 + ":\n";
+
 		return null;
 	}
 
@@ -577,8 +605,9 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		String l2 = andLabel();
 		String l3 = andLabel();
 
-		this.ll += "\tbr label %" + l0 + "\n";
-		this.ll += "\t" + l0 + ":\n";
+		// without first jump , seg fault , so i add it
+		// this.ll += "\tbr label %" + l0 + "\n";
+		// this.ll += "\t" + l0 + ":\n";
 		this.ll += "\t\tbr i1 " + clause1 + ", label %" + l1 + ", label %" + l2 + "\n";
 		this.ll += "\t" + l1 + ":\n";
 		String clause2 = n.f2.accept(this, argu);
@@ -586,7 +615,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		this.ll += "\t" + l2 + ":\n";
 		this.ll += "\t\tbr label %" + l3 + "\n";
 		this.ll += "\t" + l3 + ":\n";
-		this.ll += "\t\t" + r0 + " = " + "phi i1 [0, %" + l0 + "], [" + clause2 + ", %" + l2 + "]\n";
+		this.ll += "\t\t" + r0 + " = " + "phi i1 [0, %" + l1 + "], [" + clause2 + ", %" + l2 + "]\n";
 		
 		System.out.println("AndExpression::" + clause1 + " and " + clause2);
 		// n.f0.accept(this, argu);
@@ -671,14 +700,53 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		// System.out.println("ArrayLookup1::" + n.f0.accept(this, argu));
 		// System.out.println("ArrayLookup2::" + n.f2.accept(this, argu));
 		String array = n.f0.accept(this, argu);
-		// n.f1.accept(this, argu);
 		String index = n.f2.accept(this, argu);
 		String r0 = curmethod.getRegCount();
 		String r1 = curmethod.getRegCount();
-		this.ll += "\t" + r0 + " = getelementptr i32, i32* " + array + ", i32 " + index + "\n";
-		this.ll += "\t" + r1 + " = load i32, i32* " + r0 + "\n";
+		String r2 = curmethod.getRegCount();
+		String r3 = curmethod.getRegCount();
+		String r4 = curmethod.getRegCount();
+
+		String oob1 = oobLabel();
+		String oob2 = oobLabel();
+		String oob3 = oobLabel();
+
+		// check bounds
+		// this.ll += "\t" + r0 + " = getelementptr i32, i32* " + array + ", i32 0\n";
+		this.ll += "\t" + r0 + " = load i32, i32* " + array + "\n";
+		this.ll += "\t" + r1 + " = icmp ult i32 " + index + ", " + r0 + "\n";
+		this.ll += "\tbr i1 " + r1 + ", label %" + oob1 + ", label %" + oob2 + "\n";
+		this.ll += "\t" + oob1 + ":\n";
+		this.ll += "\t" + r2 + " = add i32 " + index + ", 1\n"; 
+		this.ll += "\t" + r3 + " = getelementptr i32, i32* " + array + ", i32 " + r2 + "\n";
+		this.ll += "\t" + r4 + " = load i32, i32* " + r3 + "\n";
+		this.ll += "\tbr label %" + oob3 + "\n";
+
+		this.ll += "\t" + oob2 + ":\n";
+		this.ll += "\tcall void @throw_oob()\n";
+		this.ll += "\tbr label %" + oob3 + "\n";
+		this.ll += "\t" + oob3 + ":\n";
+
+
 		// n.f3.accept(this, argu);
 		
+		return r4;
+	}
+
+	/**
+	* f0 -> PrimaryExpression()
+	* f1 -> "."
+	* f2 -> "length"
+	*/
+	public String visit(ArrayLength n, StoreTypes argu) throws Exception {
+		String r1 = curmethod.getRegCount();
+		// String r2 = curmethod.getRegCount();
+		// if (!n.f0.accept(this, argu).equals("int[]"))
+		// 	throw new Exception("ArrayLength::Only Int Arrays can use length");
+		String array = n.f0.accept(this, argu);
+		this.ll += "\t" + r1 + " = load i32, i32* " + array + "\n";
+
+		// isws xreiazetai argu.reg = "int"
 		return r1;
 	}
 
@@ -711,9 +779,45 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		// argument.reg = null;
 		String methodname = n.f2.f0.toString();
 		MethodType tmpMethod;
-		if ((tmpMethod = tmpclass.getMethod(methodname)) == null)
-			throw new Exception("MessageSend::Method NULL");
+		// if ((tmpMethod = tmpclass.getMethod(methodname)) == null){
+		// 	String parentName = tmpclass.getParentName();
+		// 	if (parentName == null)
+		// 		throw new Exception("MessageSend::Method NULL");
+		// 	else{
+		// 		ClassType parent = symtable.getClass(parentName);
+		// 		while ()
+		// 	}
+		// }
 		
+		if ((tmpMethod = tmpclass.getMethod(methodname)) == null){
+			// check if exist in parentclass
+			if (tmpclass.getParentName() != null)
+			{
+				tmpclass = symtable.getClass(tmpclass.getParentName());
+				boolean methodFound = false;
+				if ((tmpMethod = tmpclass.getMethod(methodname)) != null)
+					methodFound = true;
+				else{
+					// check every parent until there is noone left
+					String parentName = tmpclass.getParentName();
+					while (parentName != null){
+						tmpclass = symtable.getClass(parentName);
+						if ((tmpMethod = tmpclass.getMethod(methodname)) != null){
+							methodFound = true;
+							break;
+						}
+						parentName = tmpclass.getParentName();
+					}
+				}
+				if (!methodFound)
+					throw new Exception("MessageSend::Method has not been declared");
+			}
+			else
+				throw new Exception("MessageSend::Method has not been declared");
+
+		}
+
+
 		argu.reg = tmpMethod.getType();
 		this.ll += "\t; " + argument.reg + "." + methodname + " : " + (tmpMethod.getOffset()/8) + "\n"; 
 		this.ll += "\t" + r0 + " = bitcast i8* " + classname + " to i8***\n";
@@ -930,7 +1034,7 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		String r0 = curmethod.getRegCount();
 		String r1 = curmethod.getRegCount();
 		String r2 = curmethod.getRegCount();
-		int methods_size = tmpclass.getMethods().size(); 
+		int methods_size = tmpclass.getVtableSize(); 
 		this.ll += "\t" + r0 + " = call i8* @calloc(i32 " + 1 + ", i32 " + (tmpclass.getVarOffset()+8) + ")\n" ; 
 		this.ll += "\t" + r1 + " = bitcast i8* " + r0 + " to i8***\n";
 		this.ll += "\t" + r2 + " = getelementptr [" + methods_size +  " x i8*], [" + methods_size + " x i8*]* @." + tmpclass.getName() + "_vtable, i32 0, i32 0\n";
@@ -956,15 +1060,31 @@ public class LLVMVisitor extends GJDepthFirst<String, StoreTypes>{
 		String ret = n.f3.accept(this, argu);
 		String r0 = curmethod.getRegCount();
 		String r1 = curmethod.getRegCount();
-		int sz;
-		if (argu.reg.equals("int"))
-			sz = 4;
-		else if (argu.reg.equals("boolean"))
-			sz = 4;
-		else
-			sz = 8;
-		this.ll += "\t" + r0 + " = call i8* @calloc(i32 " + sz + ", i32 " + ret + ")\n";
+		String r2 = curmethod.getRegCount();
+		String r3 = curmethod.getRegCount();
+		String oob0 = oobLabel();
+		String oob1 = oobLabel();
+		// check if len is negative
+		this.ll += "\t" + r2 + " = icmp slt i32 " + ret + ", 0\n";
+		this.ll += "\tbr i1 " + r2 + ", label %" + oob0 + ", label %" + oob1 + "\n";
+		this.ll += "\t" + oob0 + ":\n";
+		this.ll += "\tcall void @throw_oob()\n"; 
+		this.ll += "\tbr label %" + oob1 + "\n";
+		this.ll += "\t" + oob1 + ":\n";
+		// increase array length to store extra info (len)
+		this.ll += "\t\t" + r3 + " = add i32 " + ret + ", 1\n";  
+
+		// int sz;
+		// if (argu.reg.equals("int"))
+		// 	sz = 4;
+		// else if (argu.reg.equals("boolean"))
+		// 	sz = 4;
+		// else
+		// 	sz = 8;
+		// this.ll += "\t" + r0 + " = call i8* @calloc(i32 4, i32 " + ret + ")\n";
+		this.ll += "\t" + r0 + " = call i8* @calloc(i32 4, i32 " + r3 + ")\n";
 		this.ll += "\t" + r1 + " = bitcast i8* " + r0 + " to i32*\n";
+		this.ll += "\tstore i32 " + ret + ", i32* " + r1 + "\n";
 		
 		// return type
 		argu.reg = "int[]";
