@@ -1,0 +1,17 @@
+make
+java Main [input1]...[inputN]
+
+
+gia to makefile xreiazontai ta 2 .jar kai h grammatiki minijava.jj
+
+You will need to execute the produced LLVM IR files in order to see that their output is the same as compiling the input java file with javac and executing it with java. To do that, you will need Clang with version >=4.0.0. You may download it on your Linux machine, or use it via SSH on the linuxvm machines.
+
+In Ubuntu Trusty :
+1) sudo apt update && sudo apt install clang-4.0
+2) Save the code to a file (e.g. ex.ll)
+3) clang-4.0 -o out1 ex.ll
+4) ./out1
+
+In linuxvm machines:
+1) /home/users/thp06/clang/clang -o out1 ex.ll
+2) ./out1

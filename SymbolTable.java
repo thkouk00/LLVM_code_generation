@@ -131,6 +131,8 @@ public class SymbolTable{
 		Iterator<Map.Entry<String, VariableType>> VarIterator;
 		Iterator<Map.Entry<String, MethodType>> MethIterator;
 
+		int counter = 0;
+		String mainclass = "";
 		while (LinkedHashMapIterator.hasNext()) {
 			String tmpll = "";
 			Set<String> linkedHashSet = new LinkedHashSet<>();
@@ -141,25 +143,25 @@ public class SymbolTable{
 			
 			LinkedHashMap<String, MethodType> tmpmethods = tmpclass.getMethods();
 			
-			if (tmpmethods.containsKey("main")){
-				
+			// if (tmpmethods.containsKey("main")){
+			if (counter == 0){
 				ll += "0 x i8*] []\n";
+				counter += 1;
+				mainclass = entry.getKey();
 				continue;
 			}
-			// else{
-			// 	ll += tmpmethods.size() + " x i8*] [";
-			// }
-			
+
 			int meth_counter = tmpmethods.size();
 			MethIterator = tmpmethods.entrySet().iterator();
 			while (MethIterator.hasNext()){
 				Map.Entry<String, MethodType> entry3 = MethIterator.next();
 				MethodType tmpmethod = entry3.getValue();
 				
-				// new start
+				// unique elements in hashSet
+				// structure to hold methods, we search bottom up , from current class to parent classes
+				// start from current class in order to save overrided methods
 				linkedHashSet.add(tmpmethod.getName());
-				// new end
-				System.out.println("MPIKA EDW kai len " + linkedHashSet.size());
+				
 				ArrayList<VariableType> params = tmpmethod.getParams();
 				tmpll += "i8* bitcast (" + tmpmethod.typeToLLVM(tmpmethod.getType()) + " (i8*";
 				for (VariableType temp : params) {
@@ -171,11 +173,13 @@ public class SymbolTable{
 					tmpll += ", ";
 			}
 			
-			// start
+			// get methods from parent classes if exist
 			Iterator<Map.Entry<String, MethodType>> MethIterator2;
 			String parentName = tmpclass.getParentName();
 			ClassType parentclass;
 			while (parentName != null){
+				if (parentName.equals(mainclass))
+					break;
 				parentclass = classes.get(parentName); 
 				tmpmethods = parentclass.getMethods();
 				meth_counter = tmpmethods.size();
@@ -185,34 +189,34 @@ public class SymbolTable{
 					MethodType tmpmethod = entry4.getValue();
 					if (linkedHashSet.contains(tmpmethod.getName()))
 						continue;
-					linkedHashSet.add(tmpmethod.getName());
+					
 					if (linkedHashSet.size() > 0)
 						tmpll += ", ";
+					
+					linkedHashSet.add(tmpmethod.getName());
+					
 					ArrayList<VariableType> params = tmpmethod.getParams();
 					tmpll += "i8* bitcast (" + tmpmethod.typeToLLVM(tmpmethod.getType()) + " (i8*";
 					for (VariableType temp : params) {
 						tmpll += ", " + temp.typeToLLVM(temp.getType());
 					}
 					tmpll += ")* @" + parentName + "." + entry4.getKey() + " to i8*)";
-					// meth_counter -= 1;
-					// if (meth_counter != 0)
-					// 	tmpll += ", ";
-
 				}
 				parentName = parentclass.getParentName();
 			}
-			// end
+			
 			ll += linkedHashSet.size() + " x i8*] [" + tmpll;
 			ll += "]\n\n";
 
+			// add total size of class methods, eg if there is inheritance and parent classes have different methods from current class
+			// need that info for vtables in ll code
 			tmpclass.addVtableSize(linkedHashSet.size());
-			// System.out.println("\n");
 		}
 
 		ll += "declare i8* @calloc(i32, i32)\ndeclare i32 @printf(i8*, ...)\ndeclare void @exit(i32)\n\n@_cint = constant [4 x i8] c\"%d\\0a\\00\"\n@_cOOB = constant [15 x i8] c\"Out of bounds\\0a\\00\"\n";
 		ll += "define void @print_int(i32 %i) {\n\t%_str = bitcast [4 x i8]* @_cint to i8*\n\tcall i32 (i8*, ...) @printf(i8* %_str, i32 %i)\n\tret void\n}\n\n";
 		ll += "define void @throw_oob() {\n\t%_str = bitcast [15 x i8]* @_cOOB to i8*\n\tcall i32 (i8*, ...) @printf(i8* %_str)\n\tcall void @exit(i32 1)\n\tret void\n}\n\n";
-		// System.out.println(ll);
+		
 		return ll;
 	}
 	

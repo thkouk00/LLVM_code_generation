@@ -22,19 +22,30 @@ class Main {
 
 			    TCVisitor checkVisitor = new TCVisitor(stVisitor.symtable);
 			    root.accept(checkVisitor, null);
-			    // System.err.println("Program typechecked successfully.");
+			    System.err.println("Program typechecked successfully.");
 
 			    String ll = stVisitor.symtable.printLLCode();
-			    // System.out.println("**** "+args[count]+" ****\n");
-			    // stVisitor.symtable.printOffsets();
+			    
 				LLVMVisitor llVisitor = new LLVMVisitor(stVisitor.symtable, ll);
 				root.accept(llVisitor, null);
 
-				int pos = args[count].lastIndexOf(".");
+				// strips path , keeps only filename without extension
+				int start_pos = args[count].lastIndexOf("/");
+				int last_pos = args[count].lastIndexOf(".");
 				// Otherwise return the string, up to the dot.
 
-				String filename = args[count].substring(0, pos);
-				PrintWriter writer = new PrintWriter("./output/" + filename + ".ll");
+				String filename = args[count].substring(start_pos+1, last_pos);
+				String directory = "output";
+				File file = new File(directory);
+				if (!file.exists()){
+					if (file.mkdir())
+						System.err.println("Directory with name " + directory + " created!");
+					else
+						System.err.println("Error in creating directory with name " + directory);
+					
+				}
+				// save produced code in directory named "output" and adds to filename the "ll" extension
+				PrintWriter writer = new PrintWriter(file + "/" + filename + ".ll");
 		        writer.println(llVisitor.getLLCode());
 		        
 		        writer.close();
