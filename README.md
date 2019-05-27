@@ -87,6 +87,7 @@ Example:
 phi is used for selecting a value from previous basic blocks, depending on which one was executed before the current block. Phi instructions must be the first in a basic block. It takes as arguments a list of pairs. Each pair contains the value to be selected and the predecessor block for that value. This is necessary in single-assignment languages, in places where multiple control-flow paths join, such as if-else statements, if one wants to select a value from the different paths. In the context of the exercise, you will need this for short-circuiting and (&&) expressions.
 
 Example:
+
     br i1 1, label %lb1, label %lb2
     lb1:
         %a = add i32 0, 100
